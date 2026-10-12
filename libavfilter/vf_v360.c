@@ -3001,8 +3001,10 @@ static int pannini_to_xyz(const V360Context *s,
     // Вычисляем максимальные экранные координаты для заданных углов обзора
     // Для Pannini: x = (d+1)*sin(phi) / (d+cos(phi))
     const float x_max = (d + 1.f) * sinf(h_fov_rad) / (d + cosf(h_fov_rad));
-    // Для вертикали в центре (phi=0): y = sin(theta)
-    const float y_max = sinf(v_fov_rad);
+    // Вычисляем множитель S на краю горизонтального обзора
+    const float S_edge = (d + 1.f) / (d + cosf(h_fov_rad));
+    // Корректный y_max с учетом Pannini-искажения по краям
+    const float y_max = S_edge * sinf(v_fov_rad);
 
     // Масштабируем нормализованные координаты [-1, 1] в реальные координаты Pannini
     const float x = uf * x_max;
@@ -3056,7 +3058,10 @@ static int xyz_to_pannini(const V360Context *s,
 
     // Максимальные координаты для нормализации
     const float x_max = (d + 1.f) * sinf(h_fov_rad) / (d + cosf(h_fov_rad));
-    const float y_max = sinf(v_fov_rad);
+    // Вычисляем множитель S на краю горизонтального обзора
+    const float S_edge = (d + 1.f) / (d + cosf(h_fov_rad));
+    // Корректный y_max с учетом Pannini-искажения по краям
+    const float y_max = S_edge * sinf(v_fov_rad);
 
     // Нормализация в диапазон [-1, 1]
     const float uf = x_raw / x_max;

@@ -1,4 +1,4 @@
-name: Build FFmpeg Windows
+name: Build FFmpeg Windows with NVENC
 
 on:
   push:
@@ -31,9 +31,16 @@ jobs:
             mingw-w64-x86_64-x264
             mingw-w64-x86_64-x265
             
+      - name: Download and Install NVENC Headers (Workaround)
+        run: |
+          git clone https://git.videolan.org/git/ffmpeg/nv-codec-headers.git
+          cd nv-codec-headers
+          make install PREFIX=/mingw64
+          cd ..
+          
       - name: Configure FFmpeg
         run: |
-          ./configure --arch=x86_64 --target-os=mingw64 --cross-prefix=x86_64-w64-mingw32- --enable-gpl --enable-nonfree --enable-libx264 --enable-libx265
+          ./configure --arch=x86_64 --target-os=mingw64 --enable-gpl --enable-nonfree --enable-libx264 --enable-libx265 --enable-nvenc
           
       - name: Compile FFmpeg
         run: make -j$(nproc)
@@ -41,5 +48,5 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ffmpeg-windows-build
+          name: ffmpeg-windows-build-nvenc
           path: ffmpeg.exe

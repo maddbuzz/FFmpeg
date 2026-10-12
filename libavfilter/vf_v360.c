@@ -2994,12 +2994,10 @@ static int pannini_to_xyz(const V360Context *s,
     const float uf = rescale(i, width);
     const float vf = rescale(j, height);
     const float d = s->p_param;
-
     const float h_fov_rad = s->h_fov * 0.5f * M_PI / 180.f;
     const float v_fov_rad = s->v_fov * 0.5f * M_PI / 180.f;
 
     // Вычисляем максимальные экранные координаты для заданных углов обзора
-    // Для Pannini: x = (d+1)*sin(phi) / (d+cos(phi))
     const float x_max = (d + 1.f) * sinf(h_fov_rad) / (d + cosf(h_fov_rad));
     // Вычисляем множитель S на краю горизонтального обзора
     const float S_edge = (d + 1.f) / (d + cosf(h_fov_rad));
@@ -3013,18 +3011,17 @@ static int pannini_to_xyz(const V360Context *s,
     // Обратное преобразование Pannini
     const float k = x * x / ((d + 1.f) * (d + 1.f));
     const float dscr = k * k * d * d - (k + 1.f) * (k * d * d - 1.f);
-    
     // Защита от отрицательного дискриминанта из-за погрешностей float
     const float clon = (dscr >= 0.f) ? (-k * d + sqrtf(dscr)) / (k + 1.f) : 0.f;
     const float S = (d + 1.f) / (d + clon);
 
     const float lon = atan2f(x, S * clon);
-    const float lat = atan2f(y, S);
+    // ИСПРАВЛЕНИЕ 1: asinf вместо atan2f, так как y = S * sin(lat)
+    const float lat = asinf(av_clipf(y / S, -1.f, 1.f));
 
     vec[0] = sinf(lon) * cosf(lat);
     vec[1] = sinf(lat);
     vec[2] = cosf(lon) * cosf(lat);
-    
     return 1;
 }
 
@@ -3058,32 +3055,31 @@ static int xyz_to_pannini(const V360Context *s,
 
     // Максимальные координаты для нормализации
     const float x_max = (d + 1.f) * sinf(h_fov_rad) / (d + cosf(h_fov_rad));
-    // Вычисляем множитель S на краю горизонтального обзора
     const float S_edge = (d + 1.f) / (d + cosf(h_fov_rad));
-    // Корректный y_max с учетом Pannini-искажения по краям
     const float y_max = S_edge * sinf(v_fov_rad);
 
     // Нормализация в диапазон [-1, 1]
-    const float uf = x_raw / x_max;
-    const float vf = y_raw / y_max;
+    const float uf_norm = x_raw / x_max;
+    const float vf_norm = y_raw / y_max;
+
+    // ИСПРАВЛЕНИЕ 2: Перевод из [-1, 1] в реальные пиксельные координаты [0, width-1]
+    const float uf = scale(uf_norm, width);
+    const float vf = scale(vf_norm, height);
 
     const int ui = floorf(uf);
     const int vi = floorf(vf);
-    
-    // Проверка видимости (оставлена логика оригинала, но без жесткой привязки к vec[2] >= 0, 
-    // так как при h_fov > 180 вектор может смотреть назад)
+
     const int visible = vi >= 0 && vi < height && ui >= 0 && ui < width;
 
-    *du = uf - ui;
-    *dv = vf - vi;
-    
+    *du = visible ? uf - ui : 0.f;
+    *dv = visible ? vf - vi : 0.f;
+
     for (int i = 0; i < 4; i++) {
         for (int j = 0; j < 4; j++) {
             us[i][j] = visible ? av_clip(ui + j - 1, 0, width  - 1) : 0;
             vs[i][j] = visible ? av_clip(vi + i - 1, 0, height - 1) : 0;
         }
     }
-    
     return visible;
 }
 

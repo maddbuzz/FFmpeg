@@ -1,0 +1,42 @@
+name: Build FFmpeg Windows
+
+on:
+  push:
+    branches: [ master ]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v3
+      
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            base-devel
+            mingw-w64-x86_64-toolchain
+            yasm
+            nasm
+            git
+            make
+            diffutils
+            mingw-w64-x86_64-libx264
+            mingw-w64-x86_64-libx265
+            
+      - name: Configure FFmpeg
+        run: |
+          ./configure --arch=x86_64 --target-os=mingw64 --cross-prefix=x86_64-w64-mingw32- --enable-gpl --enable-nonfree --enable-libx264 --enable-libx265
+          
+      - name: Compile FFmpeg
+        run: make -j$(nproc)
+        
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: ffmpeg-windows-build
+          path: ffmpeg.exe

@@ -151,6 +151,7 @@ typedef struct V360Context {
 
     float h_fov, v_fov, d_fov;
     float ih_fov, iv_fov, id_fov;
+    float p_param;
     float flat_range[2];
     float iflat_range[2];
 

@@ -2993,24 +2993,36 @@ static int pannini_to_xyz(const V360Context *s,
 {
     const float uf = rescale(i, width);
     const float vf = rescale(j, height);
+    const float d = s->p_param;
 
     const float h_fov_rad = s->h_fov * 0.5f * M_PI / 180.f;
     const float v_fov_rad = s->v_fov * 0.5f * M_PI / 180.f;
-    const float u_scaled = uf * sinf(h_fov_rad);
-    const float v_scaled = vf * sinf(v_fov_rad);
-    const float d = s->p_param;
-    const float k = u_scaled * u_scaled / ((d + 1.f) * (d + 1.f));
-    
+
+    // Вычисляем максимальные экранные координаты для заданных углов обзора
+    // Для Pannini: x = (d+1)*sin(phi) / (d+cos(phi))
+    const float x_max = (d + 1.f) * sinf(h_fov_rad) / (d + cosf(h_fov_rad));
+    // Для вертикали в центре (phi=0): y = sin(theta)
+    const float y_max = sinf(v_fov_rad);
+
+    // Масштабируем нормализованные координаты [-1, 1] в реальные координаты Pannini
+    const float x = uf * x_max;
+    const float y = vf * y_max;
+
+    // Обратное преобразование Pannini
+    const float k = x * x / ((d + 1.f) * (d + 1.f));
     const float dscr = k * k * d * d - (k + 1.f) * (k * d * d - 1.f);
-    const float clon = (-k * d + sqrtf(dscr)) / (k + 1.f);
+    
+    // Защита от отрицательного дискриминанта из-за погрешностей float
+    const float clon = (dscr >= 0.f) ? (-k * d + sqrtf(dscr)) / (k + 1.f) : 0.f;
     const float S = (d + 1.f) / (d + clon);
-    const float lon = atan2f(u_scaled, S * clon);
-    const float lat = atan2f(v_scaled, S);
+
+    const float lon = atan2f(x, S * clon);
+    const float lat = atan2f(y, S);
 
     vec[0] = sinf(lon) * cosf(lat);
     vec[1] = sinf(lat);
     vec[2] = cosf(lon) * cosf(lat);
-
+    
     return 1;
 }
 
@@ -3032,28 +3044,41 @@ static int xyz_to_pannini(const V360Context *s,
 {
     const float phi   = atan2f(vec[0], vec[2]);
     const float theta = asinf(vec[1]);
-
     const float d = s->p_param;
-    const float S = (d + 1.f) / (d + cosf(phi));
 
-    const float uf = S * sinf(lon) / ( (d + 1.f) / d * sinf(s->h_fov * 0.5f * M_PI / 180.f) );
-    const float vf = S * sinf(lat) / ( (d + 1.f) / d * sinf(s->v_fov * 0.5f * M_PI / 180.f) );
+    // Прямое преобразование Pannini
+    const float S = (d + 1.f) / (d + cosf(phi));
+    const float x_raw = S * sinf(phi);
+    const float y_raw = S * sinf(theta);
+
+    const float h_fov_rad = s->h_fov * 0.5f * M_PI / 180.f;
+    const float v_fov_rad = s->v_fov * 0.5f * M_PI / 180.f;
+
+    // Максимальные координаты для нормализации
+    const float x_max = (d + 1.f) * sinf(h_fov_rad) / (d + cosf(h_fov_rad));
+    const float y_max = sinf(v_fov_rad);
+
+    // Нормализация в диапазон [-1, 1]
+    const float uf = x_raw / x_max;
+    const float vf = y_raw / y_max;
 
     const int ui = floorf(uf);
     const int vi = floorf(vf);
-
-    const int visible = vi >= 0 && vi < height && ui >= 0 && ui < width && vec[2] >= 0.f;
+    
+    // Проверка видимости (оставлена логика оригинала, но без жесткой привязки к vec[2] >= 0, 
+    // так как при h_fov > 180 вектор может смотреть назад)
+    const int visible = vi >= 0 && vi < height && ui >= 0 && ui < width;
 
     *du = uf - ui;
     *dv = vf - vi;
-
+    
     for (int i = 0; i < 4; i++) {
         for (int j = 0; j < 4; j++) {
             us[i][j] = visible ? av_clip(ui + j - 1, 0, width  - 1) : 0;
             vs[i][j] = visible ? av_clip(vi + i - 1, 0, height - 1) : 0;
         }
     }
-
+    
     return visible;
 }
 

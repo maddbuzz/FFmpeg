@@ -18,6 +18,7 @@ jobs:
         uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW64
+          suppress-deprecation-warnings: msystem-mingw64
           update: true
           install: >-
             base-devel
@@ -27,8 +28,8 @@ jobs:
             git
             make
             diffutils
-            mingw-w64-x86_64-libx264
-            mingw-w64-x86_64-libx265
+            mingw-w64-x86_64-x264
+            mingw-w64-x86_64-x265
             
       - name: Configure FFmpeg
         run: |

@@ -163,6 +163,7 @@ static const AVOption v360_options[] = {
     {    "ih_fov", "input horizontal field of view",OFFSET(ih_fov), AV_OPT_TYPE_FLOAT,  {.dbl=0.f},           0.f,               360.f,TFLAGS, .unit = "ih_fov"},
     {    "iv_fov", "input vertical field of view",  OFFSET(iv_fov), AV_OPT_TYPE_FLOAT,  {.dbl=0.f},           0.f,               360.f,TFLAGS, .unit = "iv_fov"},
     {    "id_fov", "input diagonal field of view",  OFFSET(id_fov), AV_OPT_TYPE_FLOAT,  {.dbl=0.f},           0.f,               360.f,TFLAGS, .unit = "id_fov"},
+    {   "p_param", "pannini distortion parameter", OFFSET(p_param), AV_OPT_TYPE_FLOAT,  {.dbl=1.0f},          0.f,               100.f,TFLAGS, .unit = "p_param"},
     {  "h_offset", "output horizontal off-axis offset",OFFSET(h_offset), AV_OPT_TYPE_FLOAT,{.dbl=0.f},       -1.f,                 1.f,TFLAGS, .unit = "h_offset"},
     {  "v_offset", "output vertical off-axis offset",  OFFSET(v_offset), AV_OPT_TYPE_FLOAT,{.dbl=0.f},       -1.f,                 1.f,TFLAGS, .unit = "v_offset"},
     {"alpha_mask", "build mask in alpha plane",      OFFSET(alpha), AV_OPT_TYPE_BOOL,   {.i64=0},               0,                   1, FLAGS, .unit = "alpha"},
@@ -2993,13 +2994,18 @@ static int pannini_to_xyz(const V360Context *s,
     const float uf = rescale(i, width);
     const float vf = rescale(j, height);
 
-    const float d = s->h_fov;
-    const float k = uf * uf / ((d + 1.f) * (d + 1.f));
+    const float h_fov_rad = s->h_fov * 0.5f * M_PI / 180.f;
+    const float v_fov_rad = s->v_fov * 0.5f * M_PI / 180.f;
+    const float u_scaled = uf * sinf(h_fov_rad);
+    const float v_scaled = vf * sinf(v_fov_rad);
+    const float d = s->p_param;
+    const float k = u_scaled * u_scaled / ((d + 1.f) * (d + 1.f));
+    
     const float dscr = k * k * d * d - (k + 1.f) * (k * d * d - 1.f);
     const float clon = (-k * d + sqrtf(dscr)) / (k + 1.f);
     const float S = (d + 1.f) / (d + clon);
-    const float lon = atan2f(uf, S * clon);
-    const float lat = atan2f(vf, S);
+    const float lon = atan2f(u_scaled, S * clon);
+    const float lat = atan2f(v_scaled, S);
 
     vec[0] = sinf(lon) * cosf(lat);
     vec[1] = sinf(lat);
@@ -3027,14 +3033,11 @@ static int xyz_to_pannini(const V360Context *s,
     const float phi   = atan2f(vec[0], vec[2]);
     const float theta = asinf(vec[1]);
 
-    const float d = s->ih_fov;
+    const float d = s->p_param;
     const float S = (d + 1.f) / (d + cosf(phi));
 
-    const float x = S * sinf(phi);
-    const float y = S * tanf(theta);
-
-    const float uf = scale(x, width);
-    const float vf = scale(y, height);
+    const float uf = S * sinf(lon) / ( (d + 1.f) / d * sinf(s->h_fov * 0.5f * M_PI / 180.f) );
+    const float vf = S * sinf(lat) / ( (d + 1.f) / d * sinf(s->v_fov * 0.5f * M_PI / 180.f) );
 
     const int ui = floorf(uf);
     const int vi = floorf(vf);
